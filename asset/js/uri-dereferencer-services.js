@@ -258,7 +258,8 @@ UriDereferencer.addService({
                 dataMarkup += `<dt>${key}</dt><dd>${value}</dd>`;
             }
         }
-        return `<dl>${dataMarkup}</dl>`;
+		return '<p><strong>Een term uit <a target="uri-dereference" href="'+uri+'">'+ this.getName()+ '</a>:</strong></p><dl>'+dataMarkup+'</dl>';
+        //return `<dl>${dataMarkup}</dl>`;
     },
     getMatch(uri) {
       return uri.match(/^https?:\/\/[sw]w[sw]\.geonames\.org\/(.+?)(?:\/.+\.html)?$/);
@@ -345,7 +346,7 @@ UriDereferencer.addService({
                 dataMarkup += `<dt>${key}</dt><dd>${value}</dd>`;
             }
         }
-        return `<dl>${dataMarkup}</dl>`;
+        return `<p><strong>Een term uit <a target="uri-dereference" href="${uri}">Virtual International Authority File (VIAF) van OCLC</a></strong></p><dl>${dataMarkup}</dl>`;
     },
     getMatch(uri) {
         return uri.match(/^https?:\/\/(?:www\.)?viaf\.org\/viaf\/(.+?)\/?(?:#.+)?$/);
@@ -470,17 +471,328 @@ UriDereferencer.addService({
         const json = JSON.parse(text);
         const data = new Map();		
 		Object.keys(json).forEach(function(key) {
-			if (key!="geometries" && key!="uri" && json[key]!="null" && typeof json[key] === 'string') {
+		  if (key!="geometries" && key!="uri" && json[key]!="null" && typeof json[key] === 'string') {
+			if (json[key].startsWith("http")) {
+				data.set(key, `<a href="${json[key]}">${json[key]}</a>`); 
+			} else {
 				data.set(key, json[key]);
 			}
+		    
+		  }
 		})
         let dataMarkup = '';
         for (let [key, value] of data) {
             dataMarkup += `<dt>${key}</dt><dd>${value}</dd>`
         }
-        return `<dl>${dataMarkup}</dl>`;
+	    return '<p><strong>Een term uit <a target="uri-dereference" href="'+uri+'">'+ this.getName()+ '</a>:</strong></p><dl>'+dataMarkup+'</dl>';
     },
     getMatch(uri) {
         return uri.match(/^https?:\/\/www\.gemeentegeschiedenis\.nl\/gemeentenaam\/(.*)/);
+    }
+});
+UriDereferencer.addService({
+    getName() {
+        // http://data.bibliotheken.nl/doc/dataset/persons
+        return 'Nederlandse Thesaurus van Auteursnamen (NTA)';
+    },
+    getOptions() {
+		return {};
+    },
+    isMatch(uri) {
+        return (null !== this.getMatch(uri));
+    },
+    getResourceUrl(uri) {
+        const match = this.getMatch(uri);
+        return `https://data.bibliotheken.nl/doc/thes/${match[1]}.json`;
+    },
+    getMarkup(uri, text) {
+        const match = this.getMatch(uri);
+        const json = JSON.parse(text);
+        const data = new Map();		
+		
+		var graphIndex=0;
+		for(var i=0;i<json["@graph"].length;i++) {
+			if (json["@graph"][i]["@id"].includes("id/thes/")) {
+				graphIndex=i;
+			}
+		}
+		Object.keys(json["@graph"][graphIndex]).forEach(function(key) {
+			if (!json["@graph"][graphIndex][key].toString().startsWith("_:")) { // skip de blank nodes
+				data.set(key, json["@graph"][graphIndex][key]);
+			}
+		})
+        let dataMarkup = '';
+        for (let [key, value] of data) {
+			if (!key.startsWith("@")) {
+				dataMarkup += `<dt>${key}</dt><ul>`
+				if (typeof value === 'object') {
+					Object.keys(value).forEach(function(key) {
+						dataMarkup += '<li>'
+						if (value[key]['@id']) {
+							let uri=value[key]['@id'];
+							dataMarkup += `<a href="${uri}">${uri}</a><br>`
+						} else {
+							if (value[key]['@value']) {
+								dataMarkup += `${value[key]["@value"]}`
+								if (value[key]['@language']) {
+									dataMarkup += ` (${value[key]["@language"]})`
+								}
+							} else {	
+								if (value[key].startsWith("http")) {
+									dataMarkup += `<a href="${value[key]}">${value[key]}</a>`
+								} else {
+									dataMarkup += `${value[key]}`
+								}
+							}
+						}
+						dataMarkup += '</li>'
+					})
+				} else {
+					dataMarkup += `<li>${value}</li>`
+				}
+				dataMarkup += `</ul>`
+			}
+        }
+		
+		return '<p><strong>Een term uit de <a target="uri-dereference" href="'+uri+'">'+ this.getName()+ '</a>:</strong></p><dl>'+dataMarkup+'</dl><br>';
+    },
+    getMatch(uri) {
+        return uri.match(/^http?:\/\/data\.bibliotheken\.nl\/id\/thes\/(.*)/);
+    }
+});
+UriDereferencer.addService({
+    getName() {
+        return 'Het Biografisch Portaal';
+    },
+    getOptions() {
+		return {};
+    },
+    isMatch(uri) {
+        return (null !== this.getMatch(uri));
+    },
+    getResourceUrl(uri) {
+        const match = this.getMatch(uri);
+        return `https://http2https.coret.org/http://www.biografischportaal.nl/persoon/json/${match[1]}`;
+    },
+    getMarkup(uri, text) {
+        const match = this.getMatch(uri);
+        const json = JSON.parse(text);
+        let dataMarkup = '';
+
+		if (json.event.length>0) {
+			Object.keys(json.event).forEach(function(key) {
+				if (json.event[key].type=="birth" && json.event[key].when!=null) {
+					dataMarkup += `<dt>Gedoopt</dt><dd>${json.event[key].when}`
+					if (json.event[key].place!=null) {
+						dataMarkup += ` (${json.event[key].place})`
+					}
+					dataMarkup += '</dd>'
+				}
+				if (json.event[key].type=="birth" && json.event[key].when!=null) {
+					dataMarkup += `<dt>Geboren</dt><dd>${json.event[key].when}`
+					if (json.event[key].place!=null) {
+						dataMarkup += ` (${json.event[key].place})`
+					}
+					dataMarkup += '</dd>'
+				}
+				if (json.event[key].type=="death" && json.event[key].when!=null) {
+					dataMarkup += `<dt>Overleden</dt><dd>${json.event[key].when}`
+					if (json.event[key].place!=null) {
+						dataMarkup += ` (${json.event[key].place})`
+					}
+					dataMarkup += '</dd>'
+				}
+				if (json.event[key].type=="funeral" && json.event[key].when!=null) {
+					dataMarkup += `<dt>Begraven</dt><dd>${json.event[key].when}`
+					if (json.event[key].place!=null) {
+						dataMarkup += ` (${json.event[key].place})`
+					}
+					dataMarkup += '</dd>'
+				}
+			})
+        }
+	
+		if (typeof json.figures === 'object' && json.figures.length>0) {
+			dataMarkup += '<dt>Afbeelding(en)</dt><dd>'
+			Object.keys(json.biographies).forEach(function(key) {
+				if(json.figures[key]) { 
+					dataMarkup += `<img src="${json.figures[key].url}" title="${json.figures[key].head}">`
+				}
+			})
+			dataMarkup += '</dd>'
+		}
+
+		if (json.biographies.length>0) {
+			dataMarkup += `<dt>Biografie(ën)</dt><ul>`
+			Object.keys(json.biographies).forEach(function(key) {
+				dataMarkup += `<li><a href="${json.biographies[key].url_biography}">${json.biographies[key].publisher}</a></li>`
+			})
+			dataMarkup += `</ul>`
+        }
+		return '<p><strong>Een term uit het <a target="uri-dereference" href="'+uri+'">'+ this.getName()+ '</a>:</strong></p><dl>'+dataMarkup+'</dl><br>';
+    },
+    getMatch(uri) {
+        return uri.match(/^http?:\/\/www\.biografischportaal\.nl\/persoon\/(.*)/);
+    }	
+});
+UriDereferencer.addService({
+    getName() {
+        return 'Nederlandse Bibliografie Totaal (NBT) van de KB, nationale bibliotheek';
+    },
+    getOptions() {
+		return {};
+    },
+    isMatch(uri) {
+        return (null !== this.getMatch(uri));
+    },
+    getResourceUrl(uri) {
+        const match = this.getMatch(uri);
+        return `https://data.bibliotheken.nl/doc/nbt/${match[1]}.json`;
+    },
+    getMarkup(uri, text) {
+        const match = this.getMatch(uri);
+        const json = JSON.parse(text);
+		
+		var graphIndex=0;
+		for(var i=0;i<json["@graph"].length;i++) {
+			if (json["@graph"][i]["@id"].includes("id/nbt/")) {
+				graphIndex=i;
+				break;
+			}
+		}
+        let dataMarkup = '';
+		dataMarkup += '<dt>Label</dt><div class="value">'+json["@graph"][graphIndex]["label"]+'</div>';
+		dataMarkup += '<dt>Beschrijving</dt><div class="value">'+json["@graph"][graphIndex]["description"]+'</div>';
+		if (json["@graph"][graphIndex]["sameAs"]) {
+			dataMarkup += '<dt>Zelfde als</dt><div class="value"><a target="uri-dereference" href="'+json["@graph"][graphIndex]["sameAs"]+'">'+json["@graph"][graphIndex]["sameAs"]+'</a></div>';
+		} else {
+			if (json["@graph"][graphIndex]["schema:sameAs"]) {
+				dataMarkup += '<dt>Zelfde als</dt><div class="value"><a  target="uri-dereference" href="'+json["@graph"][graphIndex]["schema:sameAs"]+'">'+json["@graph"][graphIndex]["schema:sameAs"]+'</a></div>';
+			} 
+		}
+		
+        return '<p><strong>Een term uit de <a target="uri-dereference" href="'+uri+'">'+ this.getName()+ '</a>:</strong></p><dl>'+dataMarkup+'</dl>';
+    },
+    getMatch(uri) {
+        return uri.match(/^http?:\/\/data\.bibliotheken\.nl\/id\/nbt\/(.*)/);
+    }
+});
+UriDereferencer.addService({
+    getName() {
+        return 'Cultural Heritage Thesaurus (CHT) van Rijksdienst voor het Cultureel Erfgoed (RCE)';
+    },
+    getOptions() {
+        return {'useProxy': true};
+    },
+    isMatch(uri) {
+        return (null !== this.getMatch(uri));
+    },
+    getResourceUrl(uri) {
+        const match = this.getMatch(uri);
+        return `https://data.cultureelerfgoed.nl/term/id/cht/${match[1]}.rdf`;
+    },
+    getMarkup(uri, text) {
+        const parser = new DOMParser();
+        const xmlDoc = parser.parseFromString(text, 'application/xml');
+        const data = new Map();
+        data.set('Beschrijving', this.getNodeText(xmlDoc, `//rdf:Description/skos:scopeNote`));
+        data.set('Alternatieve labels', this.getNodeText(xmlDoc, `//rdf:Description/skos:altLabel`));
+        let dataMarkup = '';
+        for (let [key, value] of data) {
+            if (null !== value) {
+                dataMarkup += `<dt>${key}</dt><dd>${value}</dd>`;
+            }
+        }
+        return '<p><strong>Een term uit de <a target="uri-dereference" href="'+uri+'">'+ this.getName()+ '</a>:</strong></p><dl>'+dataMarkup+'</dl>';
+    },
+    getMatch(uri) {
+        return uri.match(/^https?:\/\/data.cultureelerfgoed.nl\/term\/id\/cht\/(.+)$/);
+    },
+    getNodeText(xmlDoc, xpathExpression) {
+        const namespaceResolver = function(prefix) {
+            const ns = {
+                'rdf': 'http://www.w3.org/1999/02/22-rdf-syntax-ns#',
+                'skos': 'http://www.w3.org/2004/02/skos/core#',
+            };
+            return ns[prefix] || null;
+        };
+        const texts = [];
+        const xpathResult = xmlDoc.evaluate(xpathExpression, xmlDoc, namespaceResolver, XPathResult.ORDERED_NODE_ITERATOR_TYPE, null);
+        let thisNode = xpathResult.iterateNext();
+        while (thisNode) {
+            texts.push(thisNode.textContent);
+            thisNode = xpathResult.iterateNext();
+        }
+        return texts.join('; ');
+    }
+});
+UriDereferencer.addService({
+    getName() {
+        return 'RKDartists';
+    },
+    getOptions() {
+		return {};
+    },
+    isMatch(uri) {
+        return (null !== this.getMatch(uri));
+    },
+    getResourceUrl(uri) {
+        // Note that Getty doesn't enable cross-origin resource sharing (CORS),
+        // so we can't directly fetch the JSON representations. Use the SPARQL
+        // endpoint instead.
+        const match = this.getMatch(uri);
+        const sparql = `PREFIX skos: <http://www.w3.org/2004/02/skos/core#>
+PREFIX crm: <http://www.cidoc-crm.org/cidoc-crm/>
+PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+PREFIX la: <https://linked.art/ns/terms/>
+SELECT ?label ?birthPlace ?birthYear ?deathPlace ?deathYear ?link WHERE {
+  OPTIONAL {
+    <https://data.rkd.nl/artists/82385> crm:P98i_was_born/crm:P7_took_place_at/crm:P89_falls_within ?bornPlace .
+    ?bornPlace skos:prefLabel ?birthPlace.
+    FILTER (lang(?birthPlace) = 'nl')
+  }
+  OPTIONAL {
+    <https://data.rkd.nl/artists/82385> crm:P98i_was_born/crm:P4_has_time-span/crm:P82a_begin_of_the_begin ?birthYear .
+  }
+  OPTIONAL {
+    <https://data.rkd.nl/artists/82385> crm:P100i_died_in/crm:P7_took_place_at/crm:P89_falls_within ?diedPlace.
+    ?diedPlace skos:prefLabel ?deathPlace.
+    FILTER (lang(?deathPlace) = 'nl')
+  }
+  OPTIONAL {
+    <https://data.rkd.nl/artists/82385> crm:P100i_died_in/crm:P4_has_time-span/crm:P82a_begin_of_the_begin ?deathYear.
+  }
+  <https://data.rkd.nl/artists/82385> crm:P129i_is_subject_of/la:access_point ?link.
+}`;
+        return `https://api.rkd.triply.cc/datasets/rkd/RKD-Knowledge-Graph/services/SPARQL/sparql?query=${encodeURIComponent(sparql)}`;
+    },
+    getMarkup(uri, text) {
+        const match = this.getMatch(uri);
+        const json = JSON.parse(text);
+        const data = new Map();
+		if (UriDereferencer.isset(() => json[0]['birthPlace'])) {
+            data.set('Geboorteplaats', json[0]['birthPlace']);
+        }
+        if (UriDereferencer.isset(() => json[0]['birthYear'])) {
+            data.set('Geboortejaar', json[0]['birthYear']);
+        }
+        if (UriDereferencer.isset(() => json[0]['deathPlace'])) {
+            data.set('Overlijdensplaats', json[0]['deathPlace']);
+        }
+        if (UriDereferencer.isset(() => json[0]['deathYear'])) {
+            data.set('Overlijdensjaar', json[0]['deathYear']);
+        }
+		if (UriDereferencer.isset(() => json[0]['link'])) {
+            data.set('Hetzelde als', '<a href="'+json[0]['link']+'" target=_blank>'+json[0]['link']+'</a>');
+        }
+        let dataMarkup = '';
+        for (let [key, value] of data) {
+            dataMarkup += `<dt>${key}</dt><dd>${value}</dd>`
+        }
+		return '<p><strong>Een term uit <a target="uri-dereference" href="'+uri+'">'+ this.getName()+ '</a>:</strong></p><dl>'+dataMarkup+'</dl><br>';
+    },
+    getMatch(uri) {
+        return uri.match(/^https?:\/\/data\.rkd\.nl\/artists\/(.*)/);
     }
 });
