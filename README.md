@@ -14,6 +14,10 @@ all "URI" data type values that match a registered service. If you want your cus
 data type values to be dereferenceable, you must add the `uri-value-link` class
 to the anchor tag containing the URI.
 
+## Demonstration
+
+[![image](uridereference.gif)](https://n2t.net/ark:/60537/bfpRN4)
+
 ## Linked data services
 
 Linked data services are JavaScript objects that are responsible for dereferencing
